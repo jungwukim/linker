@@ -87,12 +87,12 @@ def _frames(info: dict, count: int = 12):
 
 
 def extract(video_id: str) -> dict:
+    # We only need subtitles + storyboards, never media formats. When logged in,
+    # the web client may report no downloadable formats (PO token gated) — ignore
+    # that so the info dict (captions/storyboards) still comes through.
     opts = {
         "skip_download": True, "quiet": True, "no_warnings": True,
-        # Datacenter IPs (Vercel) get "confirm you're not a bot" on the default
-        # web client. These alternate clients are often not gated. yt-dlp tries
-        # them in order. If all fail, set YT_COOKIES (see README).
-        "extractor_args": {"youtube": {"player_client": ["tv", "ios", "mweb", "web_safari", "android"]}},
+        "ignore_no_formats_error": True,
     }
     # Optional: pass logged-in cookies (Netscape format) via env to bypass
     # datacenter-IP bot checks. Set YT_COOKIES in the Vercel project.

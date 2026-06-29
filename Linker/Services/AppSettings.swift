@@ -11,9 +11,11 @@ enum AppSettings {
         set { defaults.set(newValue.rawValue, forKey: providerKey) }
     }
 
-    /// Base URL of the deployed yt-dlp backend (e.g. https://xxx.vercel.app).
+    /// Base URL of the deployed yt-dlp backend. Defaults to the deployed Vercel
+    /// project; override in Settings if you redeploy elsewhere.
+    static let defaultBackendURL = "https://backend-two-silk-65.vercel.app"
     static var backendURL: String? {
-        get { defaults.string(forKey: "backend-url") }
+        get { defaults.string(forKey: "backend-url") ?? defaultBackendURL }
         set { defaults.set(newValue, forKey: "backend-url") }
     }
 
