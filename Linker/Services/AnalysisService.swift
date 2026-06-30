@@ -72,7 +72,11 @@ enum AnalysisService {
         lines.append("출처: \(platform.displayName)")
         if let sourceURLString { lines.append("URL: \(sourceURLString)") }
         if let title = metadata.title { lines.append("페이지 제목: \(title)") }
-        if let description = metadata.description { lines.append("설명: \(description)") }
+        // Skip the og:description when it's identical to the deep body (true for
+        // social posts where both come from og:description) to avoid duplication.
+        if let description = metadata.description, description != deepText {
+            lines.append("설명: \(description)")
+        }
         if let rawText, !rawText.isEmpty {
             lines.append("공유된 텍스트:\n\(String(rawText.prefix(6000)))")
         }

@@ -51,11 +51,17 @@ enum MetadataFetcher {
               let html = String(data: data, encoding: .utf8)
         else { return LinkMetadata() }
 
+        let description = ogContent(in: html, property: "og:description")
+        // Social posts (Threads/Instagram/X/Facebook) carry their full caption in
+        // og:description; long-form pages carry an article body in the HTML. Use
+        // the article when present, otherwise fall back to the caption so short
+        // posts still get a real body to display and analyze.
+        let body = extractBodyText(from: html) ?? description
         return LinkMetadata(
             title: ogContent(in: html, property: "og:title") ?? titleTag(in: html),
-            description: ogContent(in: html, property: "og:description"),
+            description: description,
             thumbnailURLString: ogContent(in: html, property: "og:image"),
-            bodyText: extractBodyText(from: html)
+            bodyText: body
         )
     }
 
@@ -104,11 +110,36 @@ enum MetadataFetcher {
     }
 
     private static func decodeEntities(_ string: String) -> String {
-        string
+        let named = string
             .replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&#39;", with: "'")
+        return decodeNumericEntities(named)
+    }
+
+    /// Decodes numeric character references — &#1234; (decimal) and &#x1F514;
+    /// (hex) — which Threads/Instagram use for emoji and smart quotes.
+    private static func decodeNumericEntities(_ string: String) -> String {
+        guard string.contains("&#"),
+              let regex = try? NSRegularExpression(pattern: "&#(x?)([0-9A-Fa-f]+);")
+        else { return string }
+        let ns = string as NSString
+        var result = ""
+        var cursor = 0
+        for match in regex.matches(in: string, range: NSRange(location: 0, length: ns.length)) {
+            result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            let isHex = ns.substring(with: match.range(at: 1)) == "x"
+            let digits = ns.substring(with: match.range(at: 2))
+            if let code = UInt32(digits, radix: isHex ? 16 : 10), let scalar = Unicode.Scalar(code) {
+                result.append(Character(scalar))
+            } else {
+                result += ns.substring(with: match.range)
+            }
+            cursor = match.range.location + match.range.length
+        }
+        result += ns.substring(with: NSRange(location: cursor, length: ns.length - cursor))
+        return result
     }
 }
