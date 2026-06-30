@@ -186,31 +186,60 @@ struct ItemDetailView: View {
     }
 }
 
-/// Full transcript/body shown inline as selectable text, with a copy button.
+/// Full transcript/body. Collapsed by default, and when expanded the text is
+/// rendered line-by-line in a LazyVStack so only on-screen lines lay out.
+/// A single 10k+ char selectable Text lays out synchronously on the main
+/// thread — that was what made both pushing and expanding this view slow.
 private struct TranscriptSection: View {
     let title: String
     let text: String
+    private let lines: [Line]
+
+    @State private var expanded = false
     @State private var copied = false
 
+    /// Stable identity for each line so the LazyVStack can recycle rows.
+    private struct Line: Identifiable {
+        let id: Int
+        let text: String
+    }
+
+    init(title: String, text: String) {
+        self.title = title
+        self.text = text
+        self.lines = text
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .enumerated()
+            .map { Line(id: $0.offset, text: String($0.element)) }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title).font(.headline)
-                Spacer()
-                Button {
-                    UIPasteboard.general.string = text
-                    copied = true
-                } label: {
-                    Label(copied ? "복사됨" : "복사", systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .font(.footnote)
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Spacer()
+                    Button {
+                        UIPasteboard.general.string = text
+                        copied = true
+                    } label: {
+                        Label(copied ? "복사됨" : "복사", systemImage: copied ? "checkmark" : "doc.on.doc")
+                            .font(.footnote)
+                    }
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    ForEach(lines) { line in
+                        Text(line.text)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
             }
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 4)
+        } label: {
+            Text(title).font(.headline)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
