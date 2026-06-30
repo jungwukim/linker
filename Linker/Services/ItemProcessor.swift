@@ -32,6 +32,64 @@ final class ItemProcessor: ObservableObject {
         await process(item, in: context)
     }
 
+    /// Merge several saved items (e.g. a Threads chain split across posts) into
+    /// one. Their bodies are concatenated in chain order (oldest first) and
+    /// re-analyzed as a single piece; the originals are then removed. Returns the
+    /// merged item, or nil if there was nothing to merge.
+    @discardableResult
+    func merge(_ items: [SavedItem], in context: ModelContext) async -> SavedItem? {
+        guard items.count >= 2, !isWorking else { return nil }
+        isWorking = true
+        defer { isWorking = false }
+
+        let ordered = items.sorted { $0.createdAt < $1.createdAt }
+        let combined = ordered
+            .compactMap { item -> String? in
+                let body = item.transcript ?? item.rawText ?? item.summary
+                return (body?.isEmpty == false) ? body : nil
+            }
+            .joined(separator: "\n\n———\n\n")
+
+        let first = ordered.first!
+        let merged = SavedItem(
+            createdAt: first.createdAt,
+            sourceURLString: first.sourceURLString,
+            rawText: combined,
+            platform: first.platform,
+            status: .analyzing
+        )
+        merged.transcript = combined
+        merged.thumbnailURLString = first.thumbnailURLString
+        context.insert(merged)
+        try? context.save()
+
+        do {
+            // Analyze the combined text directly (no single-post URL re-fetch).
+            let result = try await AnalysisService.analyze(
+                sourceURLString: nil,
+                rawText: combined,
+                platform: first.platform
+            )
+            merged.title = result.payload.title
+            merged.summary = result.payload.summary
+            merged.tags = result.payload.tags
+            merged.topics = result.payload.topics
+            merged.entities = result.payload.entities
+            merged.keyPoints = result.payload.keyPoints
+            merged.embedding = result.embedding
+            merged.transcript = combined   // keep the combined chain as the body
+            merged.status = .done
+        } catch {
+            merged.status = .failed
+            merged.analysisError = error.localizedDescription
+            lastError = error.localizedDescription
+        }
+
+        for item in ordered { context.delete(item) }
+        try? context.save()
+        return merged
+    }
+
     private func process(_ item: SavedItem, in context: ModelContext) async {
         item.status = .analyzing
         item.analysisError = nil

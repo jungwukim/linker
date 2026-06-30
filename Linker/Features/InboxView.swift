@@ -8,6 +8,9 @@ struct InboxView: View {
 
     @State private var selectedFilter: String?
     @State private var pasteError: String?
+    @State private var isSelecting = false
+    @State private var selection: Set<UUID> = []
+    @State private var showMergeConfirm = false
 
     private var filters: [String] {
         // Tags + topics across all items, most frequent first.
@@ -38,10 +41,22 @@ struct InboxView: View {
                         }
                         List {
                             ForEach(visibleItems) { item in
-                                NavigationLink {
-                                    ItemDetailView(item: item, processor: processor)
-                                } label: {
-                                    ItemRow(item: item)
+                                if isSelecting {
+                                    Button { toggle(item) } label: {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: selection.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                                                .foregroundStyle(selection.contains(item.id) ? Color.accentColor : .secondary)
+                                                .imageScale(.large)
+                                            ItemRow(item: item)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    NavigationLink {
+                                        ItemDetailView(item: item, processor: processor)
+                                    } label: {
+                                        ItemRow(item: item)
+                                    }
                                 }
                             }
                             .onDelete(perform: delete)
@@ -52,20 +67,36 @@ struct InboxView: View {
             .navigationTitle("보관함")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        paste()
-                    } label: {
-                        Image(systemName: "doc.on.clipboard")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    if processor.isWorking {
-                        ProgressView()
+                    if isSelecting {
+                        Button("취소") { endSelecting() }
                     } else {
                         Button {
-                            Task { await processor.processPending(context) }
+                            paste()
                         } label: {
-                            Image(systemName: "arrow.clockwise")
+                            Image(systemName: "doc.on.clipboard")
+                        }
+                    }
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if isSelecting {
+                        Button {
+                            showMergeConfirm = true
+                        } label: {
+                            Text(selection.count >= 2 ? "합치기 (\(selection.count))" : "합치기")
+                        }
+                        .disabled(selection.count < 2 || processor.isWorking)
+                    } else {
+                        if items.count >= 2 {
+                            Button("선택") { isSelecting = true }
+                        }
+                        if processor.isWorking {
+                            ProgressView()
+                        } else {
+                            Button {
+                                Task { await processor.processPending(context) }
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
                         }
                     }
                 }
@@ -77,6 +108,16 @@ struct InboxView: View {
                 Button("확인") { pasteError = nil }
             } message: {
                 Text(pasteError ?? "")
+            }
+            .confirmationDialog(
+                "\(selection.count)개 항목을 하나로 합칩니다",
+                isPresented: $showMergeConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("합치기", role: .destructive) { mergeSelected() }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("선택한 글이 시간순으로 연결돼 하나로 재분석되고, 원본은 삭제됩니다.")
             }
         }
     }
@@ -94,6 +135,25 @@ struct InboxView: View {
         let target = visibleItems
         for index in offsets { context.delete(target[index]) }
         try? context.save()
+    }
+
+    private func toggle(_ item: SavedItem) {
+        if selection.contains(item.id) { selection.remove(item.id) }
+        else { selection.insert(item.id) }
+    }
+
+    private func endSelecting() {
+        isSelecting = false
+        selection.removeAll()
+    }
+
+    private func mergeSelected() {
+        let chosen = items.filter { selection.contains($0.id) }
+        guard chosen.count >= 2 else { return }
+        Task {
+            await processor.merge(chosen, in: context)
+            endSelecting()
+        }
     }
 }
 
