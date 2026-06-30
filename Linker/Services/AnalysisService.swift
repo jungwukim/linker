@@ -23,11 +23,14 @@ enum AnalysisService {
         if let urlString = sourceURLString, let url = URL(string: urlString) {
             metadata = await MetadataFetcher.fetch(url: url, platform: platform)
             if platform == .youtube, let videoID = TranscriptFetcher.videoID(from: url) {
-                // Prefer the reliable backend; fall back to best-effort direct scraping.
-                if let response = await YouTubeBackend.fetch(videoID: videoID) {
+                // On-device first: the phone's residential IP avoids YouTube's
+                // datacenter bot wall, so no login cookies are needed anywhere.
+                // Fall back to the (cookie-less) backend only if direct scraping
+                // comes up empty.
+                if let direct = await TranscriptFetcher.youTubeTranscript(url: url), !direct.isEmpty {
+                    transcript = direct
+                } else if let response = await YouTubeBackend.fetch(videoID: videoID) {
                     transcript = YouTubeBackend.transcriptText(response)
-                } else {
-                    transcript = await TranscriptFetcher.youTubeTranscript(url: url)
                 }
             }
         }

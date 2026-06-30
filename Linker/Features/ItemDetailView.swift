@@ -93,10 +93,12 @@ struct ItemDetailView: View {
         .task {
             guard !framesLoaded, let videoID else { return }
             framesLoaded = true
-            if let response = await YouTubeBackend.fetch(videoID: videoID) {
+            // On-device first (phone IP, no cookies); cookie-less backend as fallback.
+            let direct = await StoryboardFetcher.frames(videoID: videoID, timestamps: keyPointTimestamps)
+            if !direct.isEmpty {
+                frames = direct
+            } else if let response = await YouTubeBackend.fetch(videoID: videoID) {
                 frames = YouTubeBackend.videoFrames(response)
-            } else {
-                frames = await StoryboardFetcher.frames(videoID: videoID, timestamps: keyPointTimestamps)
             }
         }
         .navigationTitle(item.platform.displayName)
