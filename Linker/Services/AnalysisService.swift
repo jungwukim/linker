@@ -8,6 +8,7 @@ enum AnalysisService {
         var payload: AnalysisPayload
         var thumbnailURLString: String?
         var transcript: String?
+        var mediaURLs: [String]
         var embedding: [Double]
     }
 
@@ -20,6 +21,7 @@ enum AnalysisService {
 
         var metadata = LinkMetadata()
         var transcript: String?
+        var mediaURLs: [String] = []
         if let urlString = sourceURLString, let url = URL(string: urlString) {
             metadata = await MetadataFetcher.fetch(url: url, platform: platform)
             if platform == .youtube, let videoID = TranscriptFetcher.videoID(from: url) {
@@ -32,9 +34,16 @@ enum AnalysisService {
                 } else if let response = await YouTubeBackend.fetch(videoID: videoID) {
                     transcript = YouTubeBackend.transcriptText(response)
                 }
+            } else if platform == .threads {
+                // Render the whole thread (connected posts + carousel/video media)
+                // in an offscreen WebView; fall back to og:description otherwise.
+                if let result = await ThreadsWebExtractor.extract(url: url), !result.text.isEmpty {
+                    transcript = result.text
+                    mediaURLs = result.mediaURLs
+                }
             }
         }
-        // Deep body: prefer the YouTube transcript, else the extracted page text.
+        // Deep body: prefer the fetched transcript/thread, else the extracted page text.
         let deepText = transcript ?? metadata.bodyText
 
         let content = buildContent(
@@ -55,8 +64,9 @@ enum AnalysisService {
 
         return Result(
             payload: payload,
-            thumbnailURLString: metadata.thumbnailURLString,
+            thumbnailURLString: metadata.thumbnailURLString ?? mediaURLs.first,
             transcript: transcript ?? metadata.bodyText,
+            mediaURLs: mediaURLs,
             embedding: embedding
         )
     }

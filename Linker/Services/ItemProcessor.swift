@@ -60,6 +60,9 @@ final class ItemProcessor: ObservableObject {
         )
         merged.transcript = combined
         merged.thumbnailURLString = first.thumbnailURLString
+        // Carry over every original's media (merge re-analyzes text only, no refetch).
+        var seenMedia = Set<String>()
+        merged.mediaURLs = ordered.flatMap(\.mediaURLs).filter { seenMedia.insert($0).inserted }
         context.insert(merged)
         try? context.save()
 
@@ -108,6 +111,7 @@ final class ItemProcessor: ObservableObject {
             item.entities = result.payload.entities
             item.keyPoints = result.payload.keyPoints
             item.thumbnailURLString = result.thumbnailURLString
+            item.mediaURLs = result.mediaURLs
             item.transcript = result.transcript
             item.embedding = result.embedding
             item.status = .done

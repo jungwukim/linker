@@ -27,7 +27,9 @@ struct ItemDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                if let urlString = item.thumbnailURLString, let url = URL(string: urlString) {
+                if item.mediaURLs.count > 1 {
+                    MediaGallery(urls: item.mediaURLs)
+                } else if let urlString = item.thumbnailURLString, let url = URL(string: urlString) {
                     AsyncImage(url: url) { phase in
                         if case .success(let image) = phase {
                             image.resizable().scaledToFit()
@@ -183,6 +185,35 @@ struct ItemDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+}
+
+/// Horizontally scrolling gallery of a post's media (e.g. a Threads carousel).
+private struct MediaGallery: View {
+    let urls: [String]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(urls, id: \.self) { urlString in
+                    if let url = URL(string: urlString) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().scaledToFill()
+                            case .failure:
+                                Color.secondary.opacity(0.1)
+                            default:
+                                ProgressView()
+                            }
+                        }
+                        .frame(width: 240, height: 300)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+            }
+        }
+        .frame(height: 300)
     }
 }
 

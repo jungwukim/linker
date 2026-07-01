@@ -28,6 +28,9 @@ final class SavedItem {
     var keyPoints: [String] = []
     var thumbnailURLString: String?
 
+    /// Post media (e.g. a Threads carousel's images / video posters) shown as a gallery.
+    var mediaURLs: [String] = []
+
     /// Deep body text used for analysis (YouTube transcript or extracted page text).
     var transcript: String?
 
@@ -58,6 +61,7 @@ final class SavedItem {
         self.entities = []
         self.keyPoints = []
         self.thumbnailURLString = nil
+        self.mediaURLs = []
         self.transcript = nil
         self.statusRaw = status.rawValue
         self.analysisError = nil
